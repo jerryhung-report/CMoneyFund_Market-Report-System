@@ -1,7 +1,5 @@
 {
   "name": "CMoneyFund 市場分析報告審核系統",
-  "description": "A professional AI-powered tool for generating fund market reports from Google News RSS feeds, featuring a specialized approval workflow for reviewers.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
+  "description": "專業 AI 驅動的基金市場報告生成工具，包含完整的審核流程與團隊分發功能。",
+  "requestFramePermissions": []
 }

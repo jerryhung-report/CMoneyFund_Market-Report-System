@@ -28,6 +28,7 @@ const App: React.FC = () => {
 
   const fetchNews = async () => {
     setStatus(AppStatus.FETCHING_NEWS);
+    setError(null);
     addLog("正在從 Google RSS 抓取新聞...");
     
     try {
@@ -60,7 +61,8 @@ const App: React.FC = () => {
   const handleGenerateReport = async () => {
     if (news.length === 0) return;
     setStatus(AppStatus.GENERATING_REPORT);
-    addLog("啟動 AI 市場分析報告生成...");
+    setError(null);
+    addLog("啟動 AI 市場分析報告生成 (使用 Gemini-3-Pro)...");
     
     try {
       const today = new Date();
@@ -71,7 +73,8 @@ const App: React.FC = () => {
       addLog("報告生成成功，進入待審核狀態。");
       setStatus(AppStatus.REVIEWING);
     } catch (err: any) {
-      setError(err.message);
+      console.error("Report Generation Failed:", err);
+      setError(err.message || "發生未知錯誤，請重試。");
       setStatus(AppStatus.IDLE);
       addLog(`生成失敗: ${err.message}`);
     }
@@ -86,7 +89,7 @@ const App: React.FC = () => {
   };
 
   const approveAndSendAll = () => {
-    addLog("審核通過！正在將正式報告發送給所有收件人...");
+    addLog("審核通過！正在將正式報告以密件副本 (BCC) 發送給所有收件人...");
     setTimeout(() => {
       setStatus(AppStatus.COMPLETED);
       addLog("全部發送完畢，工作流程結束。");
@@ -103,7 +106,7 @@ const App: React.FC = () => {
 
   const getReviewGreeting = (name: string) => `
     <div style="max-width: 600px; margin: 30px auto 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding-left: 10px;">
-      親愛的 <strong>${name}</strong> 您好，
+      親愛的${name === '投資夥伴' ? '' : ' '}<strong>${name}</strong> 您好：
     </div>
   `;
 
@@ -132,7 +135,6 @@ const App: React.FC = () => {
             </h2>
             
             <div className="space-y-4">
-              {/* Step 1 */}
               <div className={`p-4 rounded-xl border-2 transition-all ${news.length > 0 ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'}`}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-slate-500 uppercase">1. 抓取資料</span>
@@ -147,22 +149,21 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {/* Step 2 */}
-              <div className={`p-4 rounded-xl border-2 transition-all ${report ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'}`}>
+              <div className={`p-4 rounded-xl border-2 transition-all ${report ? 'border-green-100 bg-green-50' : error && status === AppStatus.IDLE ? 'border-red-100 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-slate-500 uppercase">2. AI 生成報告</span>
                   {report && <span className="text-green-600 text-xs font-bold">✓ 已生成</span>}
+                  {error && !report && <span className="text-red-600 text-xs font-bold">✕ 失敗</span>}
                 </div>
                 <button 
                   disabled={news.length === 0 || status === AppStatus.GENERATING_REPORT || !!report}
                   onClick={handleGenerateReport}
                   className="w-full py-2 bg-red-700 text-white rounded-lg font-semibold hover:bg-red-800 disabled:opacity-50 transition-colors"
                 >
-                  {status === AppStatus.GENERATING_REPORT ? "AI 分析中..." : "生成初稿報告"}
+                  {status === AppStatus.GENERATING_REPORT ? "AI 分析中..." : report ? "報告已生成" : "生成初稿報告"}
                 </button>
               </div>
 
-              {/* Step 3 */}
               <div className={`p-4 rounded-xl border-2 transition-all ${status === AppStatus.SENT_TO_PRIMARY || status === AppStatus.COMPLETED ? 'border-green-100 bg-green-50' : 'border-slate-100 bg-slate-50'}`}>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-slate-500 uppercase">3. 審核與分發</span>
@@ -188,7 +189,7 @@ const App: React.FC = () => {
                       onClick={approveAndSendAll}
                       className="w-full py-2 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 transition-colors"
                     >
-                      手動同意發送給全體 (Nancy 等)
+                      手動同意以密件 (BCC) 發送給全體
                     </button>
                   </div>
                 )}
@@ -199,14 +200,14 @@ const App: React.FC = () => {
                   </div>
                 )}
                 
-                {status === AppStatus.IDLE && !report && (
+                {(status === AppStatus.IDLE || status === AppStatus.FETCHING_NEWS) && !report && (
                    <p className="text-xs text-slate-400 text-center mt-2 italic">請先完成前兩步驟</p>
                 )}
               </div>
             </div>
           </section>
 
-          <section className="bg-slate-900 text-slate-300 p-4 rounded-2xl shadow-inner h-[300px] overflow-y-auto font-mono text-xs">
+          <section className="bg-slate-900 text-slate-300 p-4 rounded-2xl shadow-inner h-[250px] overflow-y-auto font-mono text-xs">
             <h3 className="text-slate-500 mb-2 uppercase tracking-widest font-bold">執行日誌</h3>
             <div className="space-y-1">
               {logs.map((log, i) => (
@@ -227,24 +228,43 @@ const App: React.FC = () => {
                  預覽報告 (Email View)
               </h2>
               <div className="flex gap-2">
-                <span className="text-xs bg-red-100 px-2 py-1 rounded text-red-700 font-bold uppercase">Draft</span>
+                {report && <span className="text-xs bg-red-100 px-2 py-1 rounded text-red-700 font-bold uppercase">Draft</span>}
                 <span className="text-xs bg-slate-200 px-2 py-1 rounded text-slate-600">600px Max</span>
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 flex justify-center">
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 flex justify-center items-start">
               {report ? (
                 <div className="bg-white shadow-xl overflow-hidden rounded-xl h-fit max-w-[600px] w-full border border-slate-200">
                    <div className="bg-slate-100 p-3 border-b border-slate-200 text-xs text-slate-600 flex flex-col gap-1">
                       <div><strong>寄件人:</strong> {SENDER_NAME}</div>
                       <div><strong>主旨:</strong> 📈 基金市場報告 - {report.dateStr}</div>
-                      <div><strong>收件人:</strong> {status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '全體收件人'}</div>
+                      <div>
+                        <strong>{status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? '收件人:' : '密件副本 (BCC):'}</strong> {status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '全體收件人'}
+                      </div>
                    </div>
                    <div className="py-8 px-2">
-                     <div dangerouslySetInnerHTML={{ __html: getReviewGreeting(status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '各位投資客戶') }} />
+                     <div dangerouslySetInnerHTML={{ __html: getReviewGreeting(status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '投資夥伴') }} />
                      <div dangerouslySetInnerHTML={{ __html: report.htmlContent }} />
                      <div dangerouslySetInnerHTML={{ __html: FOOTER_DISCLAIMER_HTML }} />
                    </div>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center h-full text-center px-6 max-w-md">
+                   <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                   </div>
+                   <h3 className="text-lg font-bold text-slate-800 mb-2">報告生成失敗</h3>
+                   <p className="text-sm text-slate-500 mb-4 leading-relaxed">{error}</p>
+                   <button 
+                    onClick={handleGenerateReport}
+                    className="px-6 py-2 bg-red-700 text-white rounded-lg font-semibold hover:bg-red-800 transition-colors"
+                   >
+                     重新嘗試生成
+                   </button>
+                   {error.includes("API Key") && (
+                     <p className="mt-4 text-xs text-slate-400">請確認您的環境變數 <code>API_KEY</code> 已正確配置且具有 Gemini API 權限。</p>
+                   )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-6">
@@ -263,7 +283,7 @@ const App: React.FC = () => {
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
              <h3 className="text-lg font-semibold mb-4 text-slate-700 flex items-center gap-2">
                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                收件清單
+                收件清單 (最終將以密件 BCC 發送)
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {RECIPIENTS_LIST.map((r, i) => (
@@ -278,9 +298,9 @@ const App: React.FC = () => {
                       </div>
                     </div>
                     {i === 0 ? (
-                      <span className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded font-black uppercase">主要審核人</span>
+                      <span className="text-[10px] bg-blue-600 text-white px-2 py-1 rounded font-black uppercase tracking-tight">主要審核人</span>
                     ) : (
-                      <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold uppercase">正式收件人</span>
+                      <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-1 rounded font-bold uppercase tracking-tight">密件收件人</span>
                     )}
                   </div>
                 ))}
@@ -290,10 +310,12 @@ const App: React.FC = () => {
       </main>
 
       {error && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 z-[100]">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          <span className="font-medium">{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 p-1 hover:bg-white/20 rounded">✕</button>
+        <div className="fixed bottom-6 right-6 bg-red-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4 z-[100] animate-slide-in">
+          <div className="flex-1">
+            <h4 className="font-bold text-sm">系統錯誤</h4>
+            <p className="text-xs opacity-90">{error}</p>
+          </div>
+          <button onClick={() => setError(null)} className="p-1 hover:bg-white/20 rounded">✕</button>
         </div>
       )}
     </div>

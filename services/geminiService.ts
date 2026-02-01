@@ -2,18 +2,19 @@
 import { GoogleGenAI } from "@google/genai";
 import { NewsItem } from '../types';
 
-// Fix: Ensure the function returns a Promise<string> and handle potential undefined text property.
 export const generateMarketReport = async (newsItems: NewsItem[], dateStr: string): Promise<string> => {
-  // Fix: Initialization must use the named parameter apiKey and directly use process.env.API_KEY.
+  if (!process.env.API_KEY) {
+    throw new Error("系統未偵測到 API Key，請確認環境設定。");
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const newsContext = newsItems.map((item, idx) => `
-    [${idx + 1}] ${item.title}
+    [新聞 ${idx + 1}] ${item.title}
     摘要: ${item.description.substring(0, 100)}
     ---
   `).join('\n');
 
-  // Fix: Escape backticks inside the template literal to prevent early termination.
   const prompt = `
 你是一個專業的基金經理人，請製作一份「基金市場報告」。讀者為基金投資客戶。
 
@@ -23,7 +24,7 @@ export const generateMarketReport = async (newsItems: NewsItem[], dateStr: strin
 3. 全文長度控制在 **900-1000 個中文字** 左右。
 4. **全文不提及特定加密貨幣名稱（如：比特幣、以太幣），請以「數位資產」替代。**
 5. **最後的投資建議區塊，務必列舉 3-5 檔相關的具體基金名稱，並列示投資理由。**
-6. 請使用純 HTML 格式，不要包含 Markdown 代碼塊（\`\`\`html）。
+6. 請直接輸出 HTML 代碼，不要包含任何 Markdown 格式。
 
 **HTML 格式要求：**
 
@@ -40,7 +41,7 @@ export const generateMarketReport = async (newsItems: NewsItem[], dateStr: strin
       [在此撰寫約 100 字的市場總覽，重點數據使用 <strong style="color: #990000;">紅色高亮</strong>。不需要招呼語。]
   </div>
 
-  <!-- 內容卡片 (請生成 4-5 張) -->
+  <!-- 內容卡片 -->
   <div style="background-color: #f2f2f2; border-radius: 12px; padding: 20px; margin: 15px 25px; border: 1px solid #f0f0f0;">
     <div style="font-size: 18px; color: #990000; font-weight: bold; margin-bottom: 10px;">議題標題</div>
     <div>內文分析...重點數據使用 <strong style="color: #990000;">紅色高亮</strong>。</div>
@@ -56,17 +57,26 @@ export const generateMarketReport = async (newsItems: NewsItem[], dateStr: strin
 【新聞資料】：
 ${newsContext}`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      temperature: 0.4,
-    }
-  });
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        temperature: 0.4,
+      }
+    });
 
-  // Fix: Access .text as a property, not a method, and handle empty results.
-  let rawContent = response.text || "";
-  rawContent = rawContent.replace(/^```html\s*/i, '').replace(/```\s*$/, '').trim();
-  
-  return rawContent;
+    const text = response.text;
+    if (!text) {
+      throw new Error("AI 回傳了空內容。");
+    }
+
+    return text.replace(/^```html\s*/i, '').replace(/```\s*$/, '').trim();
+  } catch (error: any) {
+    console.error("Gemini API Error:", error);
+    if (error.message?.includes("API key not valid")) {
+      throw new Error("無效的 API Key。請確認您的 Google Cloud 專案與 API 金鑰狀態。");
+    }
+    throw error;
+  }
 };
