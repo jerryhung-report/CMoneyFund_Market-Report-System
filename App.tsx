@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   AppStatus, 
@@ -62,7 +61,7 @@ const App: React.FC = () => {
     if (news.length === 0) return;
     setStatus(AppStatus.GENERATING_REPORT);
     setError(null);
-    addLog("啟動 AI 市場分析報告生成 (使用 Gemini-3-Pro)...");
+    addLog("啟動 AI 市場分析報告生成...");
     
     try {
       const today = new Date();
@@ -104,11 +103,15 @@ const App: React.FC = () => {
     setLogs([]);
   };
 
-  const getReviewGreeting = (name: string) => `
-    <div style="max-width: 600px; margin: 30px auto 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding-left: 10px;">
-      親愛的${name === '投資夥伴' ? '' : ' '}<strong>${name}</strong> 您好：
-    </div>
-  `;
+  const getReviewGreeting = (name: string) => {
+    // If it's for the final blast, use "投資夥伴"
+    const displayGreeting = name === '投資夥伴' ? '投資夥伴' : ` ${name}`;
+    return `
+      <div style="max-width: 600px; margin: 30px auto 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding-left: 10px;">
+        親愛的<strong>${displayGreeting}</strong> 您好：
+      </div>
+    `;
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -153,7 +156,6 @@ const App: React.FC = () => {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-slate-500 uppercase">2. AI 生成報告</span>
                   {report && <span className="text-green-600 text-xs font-bold">✓ 已生成</span>}
-                  {error && !report && <span className="text-red-600 text-xs font-bold">✕ 失敗</span>}
                 </div>
                 <button 
                   disabled={news.length === 0 || status === AppStatus.GENERATING_REPORT || !!report}
@@ -262,9 +264,6 @@ const App: React.FC = () => {
                    >
                      重新嘗試生成
                    </button>
-                   {error.includes("API Key") && (
-                     <p className="mt-4 text-xs text-slate-400">請確認您的環境變數 <code>API_KEY</code> 已正確配置且具有 Gemini API 權限。</p>
-                   )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-6">
@@ -283,7 +282,7 @@ const App: React.FC = () => {
           <section className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
              <h3 className="text-lg font-semibold mb-4 text-slate-700 flex items-center gap-2">
                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                收件清單 (最終將以密件 BCC 發送)
+                收件清單 (將以密件 BCC 寄送)
              </h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {RECIPIENTS_LIST.map((r, i) => (

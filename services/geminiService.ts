@@ -1,13 +1,13 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { NewsItem } from '../types';
 
 export const generateMarketReport = async (newsItems: NewsItem[], dateStr: string): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("系統未偵測到 API Key，請確認環境設定。");
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("系統未偵測到有效的 API Key，請確認環境設定。");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   
   const newsContext = newsItems.map((item, idx) => `
     [新聞 ${idx + 1}] ${item.title}
@@ -59,8 +59,8 @@ ${newsContext}`;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: [{ parts: [{ text: prompt }] }],
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
       config: {
         temperature: 0.4,
       }
@@ -71,11 +71,12 @@ ${newsContext}`;
       throw new Error("AI 回傳了空內容。");
     }
 
+    // Clean up potential markdown artifacts
     return text.replace(/^```html\s*/i, '').replace(/```\s*$/, '').trim();
   } catch (error: any) {
     console.error("Gemini API Error:", error);
     if (error.message?.includes("API key not valid")) {
-      throw new Error("無效的 API Key。請確認您的 Google Cloud 專案與 API 金鑰狀態。");
+      throw new Error("無效的 API Key。請確認您的環境變數 API_KEY 設定。");
     }
     throw error;
   }
