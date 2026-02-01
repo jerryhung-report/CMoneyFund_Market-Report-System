@@ -2,7 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { NewsItem } from '../types';
 
 export const generateMarketReport = async (newsItems: NewsItem[], dateStr: string): Promise<string> => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = process.env.AIzaSyARAWTRYHxENx-okHt9qRh8LbfaCP-02fg;
   if (!apiKey) {
     throw new Error("系統未偵測到有效的 API Key，請確認環境設定。");
   }
