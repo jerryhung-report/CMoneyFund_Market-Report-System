@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   AppStatus, 
@@ -104,11 +105,10 @@ const App: React.FC = () => {
   };
 
   const getReviewGreeting = (name: string) => {
-    // If it's for the final blast, use "投資夥伴"
-    const displayGreeting = name === '投資夥伴' ? '投資夥伴' : ` ${name}`;
+    const isPartner = name === '投資夥伴';
     return `
       <div style="max-width: 600px; margin: 30px auto 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding-left: 10px;">
-        親愛的<strong>${displayGreeting}</strong> 您好：
+        親愛的${isPartner ? '' : ' '}<strong>${name}</strong> 您好：
       </div>
     `;
   };
