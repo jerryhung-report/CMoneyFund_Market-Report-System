@@ -24,4 +24,5 @@ export enum AppStatus {
 export interface MarketReport {
   htmlContent: string;
   dateStr: string;
+  title: string;
 }

@@ -21,36 +21,44 @@ const App: React.FC = () => {
   const [report, setReport] = useState<MarketReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [previewWidth, setPreviewWidth] = useState<'desktop' | 'mobile'>('desktop');
+  const lastAutoRunDate = React.useRef<string | null>(null);
 
   const addLog = (msg: string) => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev]);
   };
 
-  const fetchNews = async () => {
+  const fetchNewsData = async (): Promise<NewsItem[]> => {
     setStatus(AppStatus.FETCHING_NEWS);
     setError(null);
     addLog("正在從 Google RSS 抓取新聞...");
     
-    try {
-      const encodedQuery = encodeURIComponent(`${QUERY_SITES} ${QUERY_KEYWORDS}`);
-      const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(`https://news.google.com/rss/search?q=${encodedQuery}&when:2d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`)}`;
-      
-      const response = await fetch(proxyUrl);
-      const data = await response.json();
+    const encodedQuery = encodeURIComponent(`${QUERY_SITES} ${QUERY_KEYWORDS}`);
+    const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(`https://news.google.com/rss/search?q=${encodedQuery}&when:2d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant`)}`;
+    
+    const response = await fetch(proxyUrl);
+    const data = await response.json();
 
-      if (data.status === 'ok') {
-        const items: NewsItem[] = data.items.map((item: any) => ({
-          title: item.title,
-          description: item.description.replace(/<[^>]+>/g, '').trim(),
-          link: item.link,
-          pubDate: item.pubDate
-        }));
-        setNews(items.slice(0, 12));
-        addLog(`成功抓取 ${items.length} 則新聞。`);
-        setStatus(AppStatus.IDLE);
-      } else {
-        throw new Error("無法從 RSS 服務獲取數據。");
-      }
+    if (data.status === 'ok') {
+      const items: NewsItem[] = data.items.map((item: any) => ({
+        title: item.title,
+        description: item.description.replace(/<[^>]+>/g, '').trim(),
+        link: item.link,
+        pubDate: item.pubDate
+      }));
+      const slicedItems = items.slice(0, 12);
+      setNews(slicedItems);
+      addLog(`成功抓取 ${slicedItems.length} 則新聞。`);
+      setStatus(AppStatus.IDLE);
+      return slicedItems;
+    } else {
+      throw new Error("無法從 RSS 服務獲取數據。");
+    }
+  };
+
+  const fetchNews = async () => {
+    try {
+      await fetchNewsData();
     } catch (err: any) {
       setError(err.message);
       setStatus(AppStatus.IDLE);
@@ -58,8 +66,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGenerateReport = async () => {
-    if (news.length === 0) return;
+  const handleGenerateReport = async (newsData: NewsItem[] = news) => {
+    if (newsData.length === 0) return;
     setStatus(AppStatus.GENERATING_REPORT);
     setError(null);
     addLog("啟動 AI 市場分析報告生成...");
@@ -67,9 +75,9 @@ const App: React.FC = () => {
     try {
       const today = new Date();
       const dateStr = today.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
-      const htmlContent = await generateMarketReport(news, dateStr);
+      const { title, htmlContent } = await generateMarketReport(newsData, dateStr);
       
-      setReport({ htmlContent, dateStr });
+      setReport({ htmlContent, dateStr, title });
       addLog("報告生成成功，進入待審核狀態。");
       setStatus(AppStatus.REVIEWING);
     } catch (err: any) {
@@ -79,6 +87,35 @@ const App: React.FC = () => {
       addLog(`生成失敗: ${err.message}`);
     }
   };
+
+  // 自動排程邏輯：每天早上 08:30 自動執行
+  React.useEffect(() => {
+    const checkSchedule = async () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const todayStr = now.toLocaleDateString('zh-TW');
+
+      // 檢查是否為 08:30 且今天尚未自動執行過
+      if (currentHour === 8 && currentMinute === 30 && lastAutoRunDate.current !== todayStr) {
+        lastAutoRunDate.current = todayStr;
+        addLog("⏰ 觸發自動排程：開始每日 08:30 自動生成報告流程...");
+        
+        try {
+          const fetchedNews = await fetchNewsData();
+          if (fetchedNews && fetchedNews.length > 0) {
+            await handleGenerateReport(fetchedNews);
+          }
+        } catch (err: any) {
+          addLog(`自動排程執行失敗: ${err.message}`);
+        }
+      }
+    };
+
+    // 每 30 秒檢查一次時間
+    const intervalId = setInterval(checkSchedule, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   const sendToPrimary = () => {
     addLog(`正在發送審核郵件至主要審核人: ${PRIMARY_REVIEWER.name}...`);
@@ -107,7 +144,7 @@ const App: React.FC = () => {
   const getReviewGreeting = (name: string) => {
     const isPartner = name === '投資夥伴';
     return `
-      <div style="max-width: 600px; margin: 30px auto 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding-left: 10px;">
+      <div style="max-width: 600px; margin: 0 auto; font-family: 'Microsoft JhengHei', Arial, sans-serif; color: #333; font-size: 16px; padding: 20px 30px 0 30px;">
         親愛的${isPartner ? '' : ' '}<strong>${name}</strong> 您好：
       </div>
     `;
@@ -231,21 +268,34 @@ const App: React.FC = () => {
               </h2>
               <div className="flex gap-2">
                 {report && <span className="text-xs bg-red-100 px-2 py-1 rounded text-red-700 font-bold uppercase">Draft</span>}
-                <span className="text-xs bg-slate-200 px-2 py-1 rounded text-slate-600">600px Max</span>
+                <div className="flex bg-slate-200 rounded p-0.5">
+                  <button 
+                    onClick={() => setPreviewWidth('desktop')}
+                    className={`text-xs px-2 py-1 rounded transition-colors ${previewWidth === 'desktop' ? 'bg-white shadow text-slate-800 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    桌機版 (600px)
+                  </button>
+                  <button 
+                    onClick={() => setPreviewWidth('mobile')}
+                    className={`text-xs px-2 py-1 rounded transition-colors ${previewWidth === 'mobile' ? 'bg-white shadow text-slate-800 font-bold' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    手機版 (390px)
+                  </button>
+                </div>
               </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-50 flex justify-center items-start">
               {report ? (
-                <div className="bg-white shadow-xl overflow-hidden rounded-xl h-fit max-w-[600px] w-full border border-slate-200">
+                <div className={`bg-white shadow-xl overflow-hidden rounded-xl h-fit border border-slate-200 transition-all duration-300 ${previewWidth === 'desktop' ? 'max-w-[600px] w-full' : 'max-w-[390px] w-full'}`}>
                    <div className="bg-slate-100 p-3 border-b border-slate-200 text-xs text-slate-600 flex flex-col gap-1">
                       <div><strong>寄件人:</strong> {SENDER_NAME}</div>
-                      <div><strong>主旨:</strong> 📈 基金市場報告 - {report.dateStr}</div>
+                      <div><strong>主旨:</strong> 📈 {report.title}</div>
                       <div>
                         <strong>{status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? '收件人:' : '密件副本 (BCC):'}</strong> {status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '全體收件人'}
                       </div>
                    </div>
-                   <div className="py-8 px-2">
+                   <div className="py-2 px-0 bg-[#fcfcfc]">
                      <div dangerouslySetInnerHTML={{ __html: getReviewGreeting(status === AppStatus.REVIEWING || status === AppStatus.SENT_TO_PRIMARY ? PRIMARY_REVIEWER.name : '投資夥伴') }} />
                      <div dangerouslySetInnerHTML={{ __html: report.htmlContent }} />
                      <div dangerouslySetInnerHTML={{ __html: FOOTER_DISCLAIMER_HTML }} />
